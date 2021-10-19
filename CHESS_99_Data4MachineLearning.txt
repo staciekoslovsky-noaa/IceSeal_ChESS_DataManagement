@@ -1,0 +1,99 @@
+--List of all color-thermal image pairings that could be used for detection 
+--(the total from all subset queries should total the number of records in this query)
+drop table surv_chess.alg_images_all;
+
+create table surv_chess.alg_images_all as
+select row_number() OVER (ORDER BY color_dt, thermal_dt) id, color_dt, color_image, color_path, thermal_dt, thermal_image, thermal_path
+from 
+(select unfilt_dt as color_dt, c.unfilt_image as color_image, c.unfilt_image_dir as color_path, t.unfilt_dt as thermal_dt, t.unfilt_image as thermal_image, t.unfilt_image_dir as thermal_path 
+from surv_chess.tbl_unfilt c
+inner join surv_chess.tbl_unfilt t
+using (unfilt_dt)
+where c.image_type = 'COLOR'
+and t.image_type = 'THERMAL'
+and c.unfilt_image not like '%00000000000000.000GMT_COLOR-8-BIT.JPG'
+UNION
+select distinct c.unfilt_dt as color_dt, c.unfilt_image as color_image, c.unfilt_image_dir as color_path, t.unfilt_dt as thermal_dt, t.unfilt_image as thermal_image, t.unfilt_image_dir as thermal_path 
+from surv_chess.tbl_process p
+inner join surv_chess.tbl_unfilt c
+on p.process_dt_c = c.unfilt_dt
+inner join surv_chess.tbl_unfilt t
+on p.process_dt_t = t.unfilt_dt
+where c.image_type = 'COLOR'
+and t.image_type = 'THERMAL'
+and c.unfilt_dt <> t.unfilt_dt) a;
+
+--List of all images manually reviewed (test set)
+drop table surv_chess.alg_images_testset;
+
+create table surv_chess.alg_images_testset as
+select *
+from surv_chess.alg_images_all
+where color_image in (select unfilt_image from surv_chess.tbl_unfilt_detect_images);
+
+--List of known animals on images not manually reviewed (training animals)
+drop table surv_chess.alg_images_traininganimals;
+
+create table surv_chess.alg_images_traininganimals as
+select distinct a.*, hotspot_id, hotspot_type, species_id, species_confidence, fog, x_pos as thermal_x, y_pos as thermal_y, thumb_left as color_left, thumb_top as color_top, thumb_right as color_right, thumb_bottom as color_bottom
+from (select * from surv_chess.tbl_process r where (hotspot_type = 'Animal' or (hotspot_type = 'Duplicate' and species_id <> '')) and process_dt_c not in (select color_dt from surv_chess.alg_images_testset)) b
+full join 
+(select * 
+from surv_chess.alg_images_all
+where color_dt in (select distinct process_dt_c--, process_dt_t
+from surv_chess.tbl_process
+where (hotspot_type = 'Animal' or (hotspot_type = 'Duplicate' and species_id <> ''))
+and process_dt_c not in (select color_dt from surv_chess.alg_images_testset))) a
+on process_dt_c = color_dt
+and process_dt_t = thermal_dt;
+
+--List of images near known animal frames that were also not manually reviewed (potential animals unannotated)
+drop table surv_chess.alg_images_potentialanimals;
+
+create table surv_chess.alg_images_potentialanimals as
+with target as (select id from surv_chess.alg_images_traininganimals where hotspot_id is not null)
+select * 
+from surv_chess.alg_images_all
+where color_image in (select distinct color_image
+from (
+select i.*
+from surv_chess.alg_images_all i
+inner join target
+on i.id = target.id-3
+union
+select i.*
+from surv_chess.alg_images_all i
+inner join target
+on i.id = target.id-2
+union
+select i.*
+from surv_chess.alg_images_all i
+inner join target
+on i.id = target.id-1
+union
+select i.*
+from surv_chess.alg_images_all i
+inner join target
+on i.id = target.id+1
+union
+select i.*
+from surv_chess.alg_images_all i
+inner join target
+on i.id = target.id+2
+union
+select i.*
+from surv_chess.alg_images_all i
+inner join target
+on i.id = target.id+3) a
+where color_image not in (select color_image from surv_chess.alg_images_traininganimals)
+and color_image not in (select color_image from surv_chess.alg_images_testset));
+
+--List all remaining images (training background)
+drop table surv_chess.alg_images_trainingbackground;
+
+create table surv_chess.alg_images_trainingbackground as
+select *
+from surv_chess.alg_images_all
+where color_image not in (select color_image from surv_chess.alg_images_testset)
+and color_image not in (select color_image from surv_chess.alg_images_traininganimals)
+and color_image not in (select color_image from surv_chess.alg_images_potentialanimals);

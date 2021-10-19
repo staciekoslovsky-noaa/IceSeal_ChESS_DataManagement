@@ -1,0 +1,5 @@
+CREATE VIEW surv_chess.geo_process_with_effort AS
+SELECT row_number() OVER () AS uid, p.*, correct_dt, effort_type, weather, ice_type
+FROM surv_chess.tbl_process p
+INNER JOIN surv_chess.tbl_effort_raw e
+ON p.process_dt_c = e.effort_dt

@@ -1,0 +1,23 @@
+with thermal as (select row_number() OVER (ORDER BY unfilt_dt) id, unfilt_image as thermal_image, unfilt_dt as thermal_dt
+from surv_chess.tbl_unfilt 
+where image_type = 'THERMAL'
+), 
+animal as (select thermal.id, process_image_c, process_image_t, hotspot_id, hotspot_type, species_id, x_pos, y_pos
+from (select * from surv_chess.tbl_process r where hotspot_type = 'Animal') a
+inner join thermal
+on thermal_dt = process_dt_t), 
+target as (select id, hotspot_id from animal where hotspot_type = 'Animal')
+select distinct *
+from (select i.*
+from animal i
+inner join target t
+on i.id = t.id-1
+where hotspot_type = 'Animal'
+union
+select i.*
+from animal i
+inner join target t
+on i.id = t.id+1
+where hotspot_type = 'Animal'
+) a
+order by id

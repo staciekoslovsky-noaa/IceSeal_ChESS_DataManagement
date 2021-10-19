@@ -1,0 +1,9 @@
+CREATE VIEW surv_chess.geo_track_by_flight AS
+SELECT row_number() over (order by flight_num, camera_loc) AS id, flight_num, camera_loc, ST_MakeLine(gps.geom) AS geom
+FROM (
+    SELECT flight_num, camera_loc, geom
+    FROM surv_chess.tbl_effort_raw 
+    WHERE latitude <> 0 OR longitude <> 0
+    ORDER BY flight_num, camera_loc, effort_dt) AS gps
+GROUP BY flight_num, camera_loc
+ORDER BY flight_num, camera_loc;

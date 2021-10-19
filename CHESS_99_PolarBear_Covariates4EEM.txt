@@ -1,0 +1,41 @@
+WITH a AS
+  (SELECT t.*,
+          ST_Value(r.rast, ST_Transform(t.geom, 3338)) as rast_acpcp
+   FROM surv_chess.geo_polar_bear t
+   LEFT JOIN environ.tbl_narr_acpcp AS r ON ST_Intersects(r.rast, ST_Transform(t.geom,3338))
+   WHERE (r.fdatetime_range @> t.sighting_dt)),
+     b as
+  (SELECT a.*,
+          ST_Value(r.rast, ST_Transform(a.geom, 3338)) as rast_air2m
+   FROM a
+   LEFT JOIN environ.tbl_narr_air2m AS r ON ST_Intersects(r.rast, ST_Transform(a.geom,3338))
+   WHERE (r.fdatetime_range @> a.sighting_dt)),
+     c as
+  (SELECT b.*,
+          ST_Value(r.rast, ST_Transform(b.geom, 3338)) as rast_airsfc
+   FROM b
+   LEFT JOIN environ.tbl_narr_airsfc AS r ON ST_Intersects(r.rast, ST_Transform(b.geom,3338))
+   WHERE (r.fdatetime_range @> b.sighting_dt)),
+     d as
+  (SELECT c.*,
+          ST_Value(r.rast, ST_Transform(c.geom, 3338)) as rast_prmsl
+   FROM c
+   LEFT JOIN environ.tbl_narr_prmsl AS r ON ST_Intersects(r.rast, ST_Transform(c.geom,3338))
+   WHERE (r.fdatetime_range @> c.sighting_dt)),
+     e as
+  (SELECT d.*,
+          ST_Value(r.rast, ST_Transform(d.geom, 3338)) as rast_uwnd
+   FROM d
+   LEFT JOIN environ.tbl_narr_uwnd AS r ON ST_Intersects(r.rast, ST_Transform(d.geom,3338))
+   WHERE (r.fdatetime_range @> d.sighting_dt)),
+     f AS
+  (SELECT e.*,
+          ST_Value(r.rast, ST_Transform(e.geom, 3338)) as rast_vwnd
+   FROM e
+   LEFT JOIN environ.tbl_narr_vwnd AS r ON ST_Intersects(r.rast, ST_Transform(e.geom,3338))
+   WHERE (r.fdatetime_range @> e.sighting_dt))
+   
+SELECT f.*, ST_Value(r.rast, ST_Transform(f.geom, 3338)) as rast_sea_ice_conc
+FROM f
+LEFT JOIN environ.tbl_sic_cdr_conc AS r ON ST_Intersects(r.rast, ST_Transform(f.geom,3338))
+WHERE (r.fdate = CAST(f.sighting_dt AS date))

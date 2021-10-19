@@ -1,0 +1,14 @@
+SELECT process_file, COUNT(process_file) AS FileCount, AnomalyCount
+FROM surv_chess.tbl_process AS p
+FULL JOIN
+(SELECT process_file, COUNT(process_file) AS AnomalyCount
+FROM surv_chess.tbl_process
+WHERE hotspot_type = 'Anomaly'
+GROUP BY process_file) AS a
+USING (process_file)
+GROUP BY process_file, AnomalyCount
+
+SELECT * 
+FROM surv_chess.tbl_process
+WHERE species_confidence = 'Guess'
+ORDER BY alt_species_id

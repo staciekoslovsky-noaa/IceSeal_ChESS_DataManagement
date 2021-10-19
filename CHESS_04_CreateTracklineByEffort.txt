@@ -1,0 +1,167 @@
+--USING flight_num, camera_loc, effort_dt --> NO GO!
+create table surv_chess.geo_track_by_effort as (with a as (select row_number() over (order by flight_num, camera_loc, effort_dt) as id, flight_num, camera_loc, effort_dt, effort_type, image_name, geom,
+       dense_rank() over (partition by grp order by flight_num, camera_loc, effort_dt) as row_num
+from (select t.*,
+             (row_number() over (order by flight_num, camera_loc, effort_dt) -
+              row_number() over (partition by effort_type order by flight_num, camera_loc, effort_dt)
+             ) as grp
+      from surv_chess.tbl_effort_raw t
+     ) x
+where latitude <> 0 or longitude <> 0
+ORDER BY flight_num, camera_loc, effort_dt), 
+
+b as (select id, flight_num, camera_loc, effort_dt, effort_type, row_number() over (order by flight_num, camera_loc, effort_dt) as effort_num
+from a
+where row_num = 1
+order by flight_num, camera_loc, effort_dt),
+
+c as (select b.id, c.id as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num - 1),
+
+d as (select b.id, c.id as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num + 1
+and b.effort_num = 875), 
+
+e as (select * from c 
+union
+select * from d),
+
+f as (
+select a.id, a.flight_num, a.camera_loc, a.effort_dt, a.effort_type, a.image_name, a.geom, e.effort_num
+from a, e
+where a.id >= e.id and a.id < e.next_id)
+
+select row_number() over (order by effort_num) as effort_id, flight_num, camera_loc, effort_type, st_makeline(geom)
+from   (select * from f order by flight_num, camera_loc, effort_dt) f
+group by flight_num, camera_loc, effort_type, effort_num)
+
+
+--USING id --> NO GO!
+create table surv_chess.geo_track_by_effort as (with a as (select CAST(id as int), flight_num, camera_loc, effort_dt, effort_type, image_name, geom,
+       dense_rank() over (partition by grp order by CAST(id as int)) as row_num
+from (select t.*,
+             (row_number() over (order by CAST(id as int)) -
+              row_number() over (partition by effort_type order by CAST(id as int))
+             ) as grp
+      from surv_chess.tbl_effort_raw t
+     ) x
+where latitude <> 0 or longitude <> 0
+ORDER BY id), 
+
+b as (select id, flight_num, camera_loc, effort_dt, effort_type, row_number() over (order by id) as effort_num
+from a
+where row_num = 1
+order by id),
+
+c as (select b.id, c.id as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num - 1),
+
+d as (select b.id, c.id as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num + 1
+and b.effort_num = 875), 
+
+e as (select * from c 
+union
+select * from d),
+
+f as (
+select a.id, a.flight_num, a.camera_loc, a.effort_dt, a.effort_type, a.image_name, a.geom, e.effort_num
+from a, e
+where a.id >= e.id and a.id < e.next_id)
+
+select row_number() over (order by effort_num) as effort_id, flight_num, camera_loc, effort_type, st_makeline(geom)
+from   (select * from f order by id) f
+group by flight_num, camera_loc, effort_type, effort_num)
+
+--USING id after removing misordered records  --> still not working properly!
+create table surv_chess.geo_track_by_effort as (with z as (select *, row_number() over (order by flight_num, camera_loc, cast(id as int)) as id_csv, row_number() over (order by flight_num, camera_loc, image_name) as id_image
+from surv_chess.tbl_effort_raw), 
+
+y as (select *
+from z
+where id_csv = id_image
+order by cast(id as int)),
+
+a as (select CAST(id as int), flight_num, camera_loc, effort_dt, effort_type, image_name, geom,
+       dense_rank() over (partition by grp order by CAST(id as int)) as row_num
+from (select t.*,
+             (row_number() over (order by CAST(id as int)) -
+              row_number() over (partition by effort_type order by CAST(id as int))
+             ) as grp
+      from y t
+     ) x
+where latitude <> 0 or longitude <> 0
+ORDER BY id), 
+
+b as (select id, flight_num, camera_loc, effort_dt, effort_type, row_number() over (order by id) as effort_num
+from a
+where row_num = 1
+order by id),
+
+c as (select b.id, c.id as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num - 1),
+
+d as (select b.id, c.id as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num + 1
+and b.effort_num = 875), 
+
+e as (select * from c 
+union
+select * from d),
+
+f as (
+select a.id, a.flight_num, a.camera_loc, a.effort_dt, a.effort_type, a.image_name, a.geom, e.effort_num
+from a, e
+where a.id >= e.id and a.id < e.next_id)
+
+select row_number() over (order by effort_num) as effort_id, flight_num, camera_loc, effort_type, st_makeline(geom)
+from   (select * from f order by id) f
+group by flight_num, camera_loc, effort_type, effort_num)
+
+-- USING correct_dt field for ordering --------------------> USE THIS ONE!!!!!!!!!!!!!!!!!!!!!
+create table surv_chess.geo_track_by_effort as (with z as (select *, row_number() over (order by flight_num, camera_loc, correct_dt) as id_dt
+from surv_chess.tbl_effort_raw), 
+
+a as (select CAST(id_dt as int), flight_num, camera_loc, effort_dt, effort_type, image_name, geom,
+       dense_rank() over (partition by grp order by CAST(id_dt as int)) as row_num
+from (select t.*,
+             (row_number() over (order by CAST(id_dt as int)) -
+              row_number() over (partition by effort_type order by CAST(id_dt as int))
+             ) as grp
+      from z t
+     ) x
+where latitude <> 0 or longitude <> 0
+ORDER BY id_dt), 
+
+b as (select id_dt, flight_num, camera_loc, effort_dt, effort_type, row_number() over (order by id_dt) as effort_num
+from a
+where row_num = 1
+order by id_dt),
+
+c as (select b.id_dt, c.id_dt as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num - 1),
+
+d as (select b.id_dt, c.id_dt as next_id, b.flight_num, b.camera_loc, b.effort_type, b.effort_num
+from b, b as c 
+where b.effort_num = c.effort_num + 1
+and b.effort_num = 875), 
+
+e as (select * from c 
+union
+select * from d),
+
+f as (
+select a.id_dt, a.flight_num, a.camera_loc, a.effort_dt, a.effort_type, a.image_name, a.geom, e.effort_num
+from a, e
+where a.id_dt >= e.id_dt and a.id_dt < e.next_id)
+
+select row_number() over (order by effort_num) as effort_id, flight_num, camera_loc, effort_type, st_makeline(geom order by id_dt)
+from f
+group by flight_num, camera_loc, effort_type, effort_num)

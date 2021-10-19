@@ -1,0 +1,75 @@
+CREATE OR REPLACE VIEW surv_chess.geo_polar_bear AS
+ WITH a AS (
+         SELECT e.effort_image,
+            p.id,
+            p.unfilt_image,
+            p.polar_bear,
+            p.hotspot_id,
+            p.hotspot_type,
+            e.geom
+           FROM (surv_chess.tbl_effort_raw e
+             RIGHT JOIN surv_chess.tbl_unfilt_detect_manual_polarbear p ON ((p.unfilt_image = e.effort_image)))
+        ), b AS (
+         SELECT e.effort_image,
+            p.color_image_name,
+            p.thermal_image_name,
+            p.hotspot_id,
+            p.species_id,
+            p.hotspot_type,
+            p.number_of_seals AS num_polar_bear,
+            p.age_class,
+            e.geom
+           FROM (surv_chess.tbl_process p
+             JOIN surv_chess.tbl_effort_raw e ON ((p.process_dt_t = e.effort_dt)))
+          WHERE (p.species_id = 'Polar Bear'::text)
+        ), c AS (
+         SELECT DISTINCT row_number() OVER (ORDER BY hotspot_id) AS id,
+                CASE
+                    WHEN (a.effort_image IS NULL) THEN b.effort_image
+                    ELSE a.effort_image
+                END AS effort_image,
+                CASE
+                    WHEN (a.hotspot_id IS NULL) THEN b.hotspot_id
+                    ELSE a.hotspot_id
+                END AS hotspot_id,
+                b.color_image_name,
+                b.thermal_image_name,
+                CASE
+                    WHEN (a.hotspot_type IS NULL) THEN b.hotspot_type
+                    ELSE a.hotspot_type
+                END AS hotspot_type,
+                b.species_id,
+                b.num_polar_bear,
+                b.age_class,
+                a.polar_bear,
+                CASE
+                    WHEN (a.geom IS NULL) THEN b.geom
+                    ELSE a.geom
+                END AS geom
+           FROM (a
+             FULL JOIN b USING (hotspot_id))
+        ),
+        d AS (
+         SELECT c.hotspot_id,
+                c.id,
+                c.effort_image,
+                c.color_image_name,
+                c.thermal_image_name,
+                c.hotspot_type,
+                c.species_id,
+                c.num_polar_bear,
+                c.age_class,
+                c.polar_bear,
+                c.geom,
+                tbl_polar_bear.polar_bear_id,
+                tbl_polar_bear.detection_manual,
+                tbl_polar_bear.detection_skeyes,
+                tbl_polar_bear.culled,
+                tbl_polar_bear.polar_bear_comments
+            FROM (c
+            JOIN surv_chess.tbl_polar_bear USING (hotspot_id))
+)
+SELECT d.*, effort_type, correct_dt AS sighting_dt
+FROM d
+INNER JOIN surv_chess.tbl_effort_raw
+USING (effort_image);
